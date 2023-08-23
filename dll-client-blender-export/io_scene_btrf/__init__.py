@@ -1,7 +1,8 @@
 #
 # BTRFdom - Rappelz BTRF Document Object Model
-# By Glandu2
+# By Glandu2/Ldxngx/Peakz
 # Copyright 2013 Glandu2
+# Updated to 3.0 by Andrej Tetkic
 #
 # This file is part of BTRFdom.
 # BTRFdom is free software: you can redistribute it and/or modify
@@ -21,7 +22,7 @@
 bl_info = {
 	"name": "Rappelz NX3 format",
 	"author": "Glandu2",
-	"blender": (2, 6, 4),
+	"blender": (999, 0),
 	"version": (0, 2, 0),
 	"location": "File > Import-Export",
 	"description": "Export to a Rappelz NX3 file",
@@ -34,16 +35,19 @@ from . import export_nx3
 from . import import_nx3
 import imp
 
+BlenderVersionMajor, BlenderVersionMinor = bpy.app.version[:2]	
+	
 
 class ExportBTRF(bpy.types.Operator, ExportHelper):
 	bl_idname = "export_mesh.nx3"
 	bl_label = "Export NX3"
 	bl_options = {'PRESET'}
 
+	
 	filepath = StringProperty(
 			subtype='FILE_PATH',
 			)
-
+	
 	filename_ext = ".nx3"
 
 	def execute(self, context):
@@ -56,11 +60,11 @@ class ImportBTRF(bpy.types.Operator, ImportHelper):
 	bl_idname = "import_mesh.nx3"
 	bl_label = "Import NX3"
 	bl_options = {'PRESET'}
-
+	
 	filepath = StringProperty(
 			subtype='FILE_PATH',
 			)
-
+	
 	filename_ext = ".nx3"
 
 	def execute(self, context):
@@ -76,19 +80,43 @@ def menu_func_export(self, context):
 def menu_func_import(self, context):
 	self.layout.operator(ImportBTRF.bl_idname, text="Rappelz NX3 (.nx3)")
 
+if BlenderVersionMajor < 3 and BlenderVersionMinor < 80 :
+	def register():
+		bpy.utils.register_module(__name__)
 
-def register():
-	bpy.utils.register_module(__name__)
-
-	bpy.types.INFO_MT_file_import.append(menu_func_import)
-	bpy.types.INFO_MT_file_export.append(menu_func_export)
+		bpy.types.INFO_MT_file_import.append(menu_func_import)
+		bpy.types.INFO_MT_file_export.append(menu_func_export)
 
 
-def unregister():
-	bpy.utils.unregister_module(__name__)
+	def unregister():
+		bpy.utils.unregister_module(__name__)
 
-	bpy.types.INFO_MT_file_import.remove(menu_func_import)
-	bpy.types.INFO_MT_file_export.remove(menu_func_export)
+		bpy.types.INFO_MT_file_import.remove(menu_func_import)
+		bpy.types.INFO_MT_file_export.remove(menu_func_export)
 
-if __name__ == "__main__":
-	register()
+	if __name__ == "__main__":
+		register()
+	
+else:
+	classes = [
+		ExportBTRF,
+		ImportBTRF,
+		]
+
+	def register():
+		for cls in classes:
+			bpy.utils.register_class(cls)
+
+		bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
+		bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
+
+
+	def unregister():
+		for cls in classes:
+			bpy.utils.unregister_class(cls)
+		
+		bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
+		bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
+
+	if __name__ == "__main__":
+		register()

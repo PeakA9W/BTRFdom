@@ -1,6 +1,6 @@
 #
 # BTRFdom - Rappelz BTRF Document Object Model
-# By Glandu2
+# By Glandu2/Ldxngx/Peakz
 # Copyright 2013 Glandu2
 #
 # This file is part of BTRFdom.
@@ -133,6 +133,14 @@ import os
 import binascii
 import struct
 
+BlenderVersionMajor, BlenderVersionMinor = bpy.app.version[:2]
+
+if BlenderVersionMajor < 3 and BlenderVersionMinor < 80 :
+	pass
+else:
+	from . import compatibility as cp
+
+
 nx3_version_header_guid = uuid.UUID('{81BCE021-AD76-346f-9C7D-19885FD118B6}')
 
 nx3_mtl_header_guid = uuid.UUID('{209BBB41-681F-4b9b-9744-4D88E1413DCC}')
@@ -248,8 +256,23 @@ def get_materials_bones_from_object(blender_object, materials_info, bones_info):
 	bone_name_unique_check = set()
 	if blender_object.type == 'ARMATURE':
 		for bone in blender_object.pose.bones:
-			bone_global_matrix = (bone.id_data.matrix_world.inverted() * bone.matrix).inverted().transposed()
-			tm = [val for vect in bone_global_matrix for val in vect]
+			if BlenderVersionMajor < 3 and BlenderVersionMinor < 80 : 
+				bone_global_matrix = (bone.id_data.matrix_world.inverted() * bone.matrix).inverted().transposed()
+				tm = [val for vect in bone_global_matrix for val in vect]
+				print("2.72")
+			else:
+
+				bone_global_matrix_ = cp.matmul(bone.matrix,bone.id_data.matrix_world) 
+
+				bone_global_matrix_inv_trans = bone_global_matrix_.inverted().transposed()
+				tm = [val for vect in bone_global_matrix_inv_trans for val in vect]
+				print("3")
+					
+				
+
+
+
+
 			if bone.name not in bone_name_unique_check:
 				bone_name_unique_check.add(bone.name)
 				bones_info.append(BoneInfo(bone.name, tm))
@@ -269,12 +292,26 @@ def get_materials_bones():
 
 def get_texture_filename(material):
 	#try:
-	if material.texture_slots:
-		texture_slot = material.texture_slots[0]
-		if texture_slot is not None:
-			texture = texture_slot.texture
-			if texture is not None and texture.type == 'IMAGE':
-				return os.path.basename(texture.image.filepath)
+
+	if BlenderVersionMajor < 3 and BlenderVersionMinor < 80 :
+		if material.texture_slots:
+			texture_slot = material.texture_slots[0]
+			if texture_slot is not None:
+				texture = texture_slot.texture
+				if texture is not None and texture.type == 'IMAGE':
+					return os.path.basename(texture.image.filepath)
+		print("2.72")
+	else:
+		try:
+			material.use_nodes = True
+			master = material.node_tree.nodes["Principled BSDF"]
+			tex_node = master.inputs[0].links[0].from_node
+			return os.path.basename(tex_node.image.filepath)
+		except:
+			pass
+		print("3")
+			
+	
 	#except:
 		#pass
 	return "(null)"
@@ -331,7 +368,16 @@ def get_mtl_block(tmlFile, rootBlock, material_info):
 	mtl_id = material_info.material_id
 	channel_id = material_info.channel_id
 	power = 0
-	self_illumi = material_info.material.emit
+	
+	if BlenderVersionMajor < 3 and BlenderVersionMinor < 80 :
+		self_illumi = material_info.material.emit
+		print("2.72")
+	else:
+		material_info.material.use_nodes = True
+		master = material_info.material.node_tree.nodes["Principled BSDF"]
+		self_illumi = master.inputs[18].default_value
+		print("3")
+
 	smoothing = 0
 	ambient = 0
 	diffuse = 0
@@ -557,11 +603,11 @@ def get_nx3_mesh_frame(tmlFile, rootBlock, mesh_matrix, vertex_info_array, verte
 
 	return block
 
-
+j = 0
 def get_nx3_mesh_block(tmlFile, rootBlock, mesh_object, mesh_data, mesh_block_faces, tex_index):
 	#Create a block that will contain the data of the template
 	fieldInfo = tmlFile.getTemplateByGuid(nx3_mesh_block_guid.bytes_le)
-
+	global j
 	block = BtrfBlock()
 	block.create(fieldInfo, rootBlock)
 
@@ -579,21 +625,43 @@ def get_nx3_mesh_block(tmlFile, rootBlock, mesh_object, mesh_data, mesh_block_fa
 	vertex_info_array = {}
 	index_array = []
 
-	for face in mesh_block_faces:
-		for i, vertex_index in reversed(list(enumerate(face.vertices))):    # reversed instead of enumerate else normals are wrong
-			if has_texture:
-				uv_texture = mesh_data.tessface_uv_textures[0]
-				vertex_info = VertexInfo(vertex_index, mesh_data.vertices[vertex_index].co, mesh_data.vertices[vertex_index].normal, uv_texture.data[face.index].uv[i])
-			else:
-				vertex_info = VertexInfo(vertex_index, mesh_data.vertices[vertex_index].co, mesh_data.vertices[vertex_index].normal)
+	if BlenderVersionMajor < 3 and BlenderVersionMinor < 80 :
+		for face in mesh_block_faces:
+			for i, vertex_index in reversed(list(enumerate(face.vertices))):    # reversed instead of enumerate else normals are wrong
+				if has_texture:
+					uv_texture = mesh_data.tessface_uv_textures[0]
+					vertex_info = VertexInfo(vertex_index, mesh_data.vertices[vertex_index].co, mesh_data.vertices[vertex_index].normal, uv_texture.data[face.index].uv[i])
+				else:
+					vertex_info = VertexInfo(vertex_index, mesh_data.vertices[vertex_index].co, mesh_data.vertices[vertex_index].normal)
 
-			#index = index_of_vertex_info(vertex_info_array, vertex_info)
-			if vertex_info in vertex_info_array:
-				index_array.append(vertex_info_array[vertex_info])
-			else:
-				index = len(vertex_info_array)
-				vertex_info_array[vertex_info] = index
-				index_array.append(index)
+				#index = index_of_vertex_info(vertex_info_array, vertex_info)
+				if vertex_info in vertex_info_array:
+					index_array.append(vertex_info_array[vertex_info])
+				else:
+					index = len(vertex_info_array)
+					vertex_info_array[vertex_info] = index
+					index_array.append(index)
+		print("2.72")			
+	else:
+		for face in mesh_block_faces:
+			for vertex_index, loops_idx in reversed(list(zip(face.vertices, face.loop_indices))):    # reversed instead of enumerate else normals are wrong
+				#print(i, vertex_index, end=" ;  ")
+				if has_texture:
+					uv_texture = mesh_data.uv_layers[0] #mesh_data.uv_layers[0] 
+					#bm = bmesh.from_edit_mesh(mesh_data)
+					#uv_layer = bm.loops.layers.uv
+					vertex_info = VertexInfo(vertex_index, mesh_data.vertices[vertex_index].co, mesh_data.vertices[vertex_index].normal, uv_texture.data[loops_idx].uv) #uv_texture.data[face.index].uv)
+				else:
+					vertex_info = VertexInfo(vertex_index, mesh_data.vertices[vertex_index].co, mesh_data.vertices[vertex_index].normal)
+				#index = index_of_vertex_info(vertex_info_array, vertex_info)
+				if vertex_info in vertex_info_array:
+					index_array.append(vertex_info_array[vertex_info])
+				else:
+					index = len(vertex_info_array)
+					vertex_info_array[vertex_info] = index
+					index_array.append(index)
+				j -= 1
+		print("3")
 
 	mesh_frame = get_nx3_mesh_frame(tmlFile, rootBlock, mesh_object.matrix_world, vertex_info_array, vertex_groups, has_texture)
 
@@ -624,32 +692,70 @@ def get_nx3_new_mesh(tmlFile, rootBlock, mesh_object, materials_info):
 	block = BtrfBlock()
 	block.create(fieldInfo, rootBlock)
 
-	mesh_data = mesh_object.to_mesh(bpy.context.scene, True, 'PREVIEW')
-	mesh_data.update(calc_tessface=True)
+	if BlenderVersionMajor < 3 and BlenderVersionMinor < 80 :
+		mesh_data = mesh_object.to_mesh(bpy.context.scene, True, 'PREVIEW')
+		mesh_data.update(calc_tessface=True)
 
-	if mesh_object.name in materials_info and len(materials_info[mesh_object.name]) > 0 and len(mesh_data.tessface_uv_textures) > 0:
-		has_material = True
+		if mesh_object.name in materials_info and len(materials_info[mesh_object.name]) > 0 and len(mesh_data.tessface_uv_textures) > 0:
+			has_material = True
+		else:
+			has_material = False
+		print("2.72")
 	else:
-		has_material = False
+		mesh_data = mesh_object.to_mesh(preserve_all_data_layers=True, depsgraph=None)
+		mesh_data.update(calc_edges=False, calc_edges_loose=False)
+
+		if mesh_object.name in materials_info and len(materials_info[mesh_object.name]) > 0 and len(mesh_data.uv_layers) > 0:
+			has_material = True
+		else:
+			has_material = False
+		print("3")
+
 
 	mesh_name = mesh_object.name
 
-	if has_material is True:
-		material_id = materials_info[mesh_object.name][0].material_id
-		channel_id = 0
-	else:
-		material_id = -1
-		channel_id = 0
+	if BlenderVersionMajor < 3 and BlenderVersionMinor < 80 :
+		if has_material is True:
+			material_id = materials_info[mesh_object.name][0].material_id
+			channel_id = 0
+		else:
+			material_id = -1
+			channel_id = 0
 
-	if has_material is True:
-		mesh_blocks_faces = [[] for _ in range(len(materials_info[mesh_object.name]))]
-		# Separate faces to several mesh_block to have at most one texture per mesh_block
-		for face in mesh_data.tessfaces:
-			mesh_blocks_faces[face.material_index].append(face)
+		if has_material is True:
+			mesh_blocks_faces = [[] for _ in range(len(materials_info[mesh_object.name]))]
+			# Separate faces to several mesh_block to have at most one texture per mesh_block
+			for face in mesh_data.tessfaces:
+				mesh_blocks_faces[face.material_index].append(face)
 
-		mesh_block_array = [get_nx3_mesh_block(tmlFile, rootBlock, mesh_object, mesh_data, mesh_block_faces, texture_index) for texture_index, mesh_block_faces in enumerate(mesh_blocks_faces)]
+			mesh_block_array = [get_nx3_mesh_block(tmlFile, rootBlock, mesh_object, mesh_data, mesh_block_faces, texture_index) for texture_index, mesh_block_faces in enumerate(mesh_blocks_faces)]
+		else:
+			mesh_block_array = [get_nx3_mesh_block(tmlFile, rootBlock, mesh_object, mesh_data, mesh_data.tessfaces, None)]
+		print("2.72")
 	else:
-		mesh_block_array = [get_nx3_mesh_block(tmlFile, rootBlock, mesh_object, mesh_data, mesh_data.tessfaces, None)]
+		if has_material is True:
+			material_id = materials_info[mesh_object.name][0].material_id
+			channel_id = 0
+		else:
+			material_id = -1
+			channel_id = 0
+			
+		global j
+		j = len(mesh_data.uv_layers[0].data[:]) - 1
+		if has_material is True:
+			mesh_blocks_faces = [[] for _ in range(len(materials_info[mesh_object.name]))]
+			# Separate faces to several mesh_block to have at most one texture per mesh_block
+			for face in mesh_data.polygons:
+				#print(face, face.material_index)
+				mesh_blocks_faces[face.material_index].append(face)
+			
+			#print(mesh_blocks_faces)	
+			#print(mesh_blocks_faces)
+			#print(len(mesh_blocks_faces))
+			mesh_block_array = [get_nx3_mesh_block(tmlFile, rootBlock, mesh_object, mesh_data, mesh_block_faces, texture_index) for texture_index, mesh_block_faces in enumerate(mesh_blocks_faces)]
+		else:
+			mesh_block_array = [get_nx3_mesh_block(tmlFile, rootBlock, mesh_object, mesh_data, mesh_data.polygons, None)]
+		print("3x")
 
 	ani_time_array = []
 	ani_matrix_array = []
@@ -720,7 +826,11 @@ def get_nx3_new_mesh(tmlFile, rootBlock, mesh_object, materials_info):
 		subBlock.addBlock(mesh_children_array[i])
 	block.addBlock(subBlock)
 
-	bpy.data.meshes.remove(mesh_data)
+	if BlenderVersionMajor < 3 and BlenderVersionMinor < 80 :
+		bpy.data.meshes.remove(mesh_data)
+		print("2.72")
+	else:
+		print("3")
 
 	return block
 
